@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>POS System</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background-color: #f9f9f9;
+    }
+    #search-container {
+      position: relative;
+      width: 300px;
+    }
+    #suggestions {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      width: 100%;
+      z-index: 10;
+    }
+    #suggestions div {
+      padding: 8px;
+      cursor: pointer;
+    }
+    #suggestions div:hover {
+      background-color: #f0f0f0;
+    }
+    #invoice {
+      background: white;
+      padding: 1rem;
+      margin-top: 2rem;
+      border: 1px solid #ccc;
+      width: 500px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+    }
+    #pdf-btn {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>POS System</h1>
+
+  <div id="search-container">
+    <input type="text" id="item-search" placeholder="Search for an item..." autocomplete="off"/>
+    <div id="suggestions"></div>
+  </div>
+  <button onclick="addToInvoice()">Add to Cart</button>
+
+  <div id="invoice">
+    <h2>Invoice</h2>
+    <table id="invoice-table">
+      <thead>
+        <tr><th>Item</th><th>Price</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p><strong>Total: $<span id="total">0.00</span></strong></p>
+  </div>
+
+  <button id="pdf-btn" onclick="generatePDF()">Generate PDF</button>
+
+  <script>
+    const items = [
+      { name: "Apple", price: 1.00 },
+      { name: "Banana", price: 0.50 },
+      { name: "Orange Juice", price: 2.75 },
+      { name: "Bread", price: 1.80 },
+      { name: "Eggs", price: 3.00 },
+      { name: "Milk", price: 2.50 }
+    ];
+
+    let selectedItem = null;
+
+    const searchInput = document.getElementById('item-search');
+    const suggestionsDiv = document.getElementById('suggestions');
+
+    searchInput.addEventListener('input', function () {
+      const query = this.value.toLowerCase();
+      suggestionsDiv.innerHTML = '';
+      if (query.length === 0) return;
+
+      const filtered = items.filter(item => item.name.toLowerCase().includes(query));
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.textContent = item.name;
+        div.onclick = () => {
+          searchInput.value = item.name;
+          selectedItem = item;
+          suggestionsDiv.innerHTML = '';
+        };
+        suggestionsDiv.appendChild(div);
+      });
+    });
+
+    function addToInvoice() {
+      const name = searchInput.value;
+      const item = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+
+      if (!item) {
+        alert("Item not found or not selected from suggestions.");
+        return;
+      }
+
+      const tbody = document.querySelector("#invoice-table tbody");
+      const row = document.createElement("tr");
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = item.name;
+
+      const priceCell = document.createElement("td");
+      priceCell.textContent = `$${item.price.toFixed(2)}`;
+
+      row.appendChild(nameCell);
+      row.appendChild(priceCell);
+      tbody.appendChild(row);
+
+      updateTotal(item.price);
+
+      searchInput.value = '';
+      selectedItem = null;
+    }
+
+    function updateTotal(price) {
+      const totalSpan = document.getElementById('total');
+      const current = parseFloat(totalSpan.textContent);
+      totalSpan.textContent = (current + price).toFixed(2);
+    }
+
+    function generatePDF() {
+      const invoice = document.getElementById("invoice");
+      html2pdf().from(invoice).save("invoice.pdf");
+    }
+  </script>
+
+</body>
+</html>
