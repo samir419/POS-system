@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>POS System</title>
+  <title>Enhanced POS System</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
       padding: 2rem;
-      background-color: #f9f9f9;
+      background-color: #f0f4f8;
     }
     #search-container {
       position: relative;
       width: 300px;
+      margin-bottom: 1rem;
     }
     #suggestions {
       position: absolute;
@@ -21,6 +22,8 @@
       border: 1px solid #ccc;
       width: 100%;
       z-index: 10;
+      max-height: 150px;
+      overflow-y: auto;
     }
     #suggestions div {
       padding: 8px;
@@ -34,7 +37,7 @@
       padding: 1rem;
       margin-top: 2rem;
       border: 1px solid #ccc;
-      width: 500px;
+      width: 600px;
     }
     table {
       width: 100%;
@@ -44,34 +47,66 @@
     th, td {
       padding: 8px;
       border-bottom: 1px solid #ddd;
+      text-align: center;
     }
-    #pdf-btn {
+    .remove-btn {
+      cursor: pointer;
+      color: red;
+      font-weight: bold;
+    }
+    .controls {
       margin-top: 1rem;
+    }
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4caf50;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.4s;
+      z-index: 9999;
+    }
+    .toast.show {
+      opacity: 1;
     }
   </style>
 </head>
 <body>
 
-  <h1>POS System</h1>
+  <h1>Enhanced POS System</h1>
 
   <div id="search-container">
     <input type="text" id="item-search" placeholder="Search for an item..." autocomplete="off"/>
     <div id="suggestions"></div>
   </div>
-  <button onclick="addToInvoice()">Add to Cart</button>
+
+  <div>
+    <label>Quantity: 
+      <input type="number" id="quantity" value="1" min="1" style="width: 60px;">
+    </label>
+  </div>
+
+  <div class="controls">
+    <button id="add-btn" onclick="addToInvoice()" disabled>Add to Cart</button>
+    <button onclick="clearInvoice()">Clear Invoice</button>
+    <button onclick="generatePDF()">Generate PDF</button>
+  </div>
 
   <div id="invoice">
     <h2>Invoice</h2>
     <table id="invoice-table">
       <thead>
-        <tr><th>Item</th><th>Price</th></tr>
+        <tr><th>Item</th><th>Quantity</th><th>Price</th><th>Total</th><th>Remove</th></tr>
       </thead>
       <tbody></tbody>
     </table>
     <p><strong>Total: $<span id="total">0.00</span></strong></p>
   </div>
 
-  <button id="pdf-btn" onclick="generatePDF()">Generate PDF</button>
+  <div class="toast" id="toast"></div>
 
   <script>
     const items = [
@@ -87,31 +122,40 @@
 
     const searchInput = document.getElementById('item-search');
     const suggestionsDiv = document.getElementById('suggestions');
+    const addBtn = document.getElementById('add-btn');
 
     searchInput.addEventListener('input', function () {
       const query = this.value.toLowerCase();
       suggestionsDiv.innerHTML = '';
+      selectedItem = null;
+      addBtn.disabled = true;
+
       if (query.length === 0) return;
 
       const filtered = items.filter(item => item.name.toLowerCase().includes(query));
       filtered.forEach(item => {
         const div = document.createElement('div');
-        div.textContent = item.name;
+        const regex = new RegExp(`(${query})`, 'gi');
+        div.innerHTML = item.name.replace(regex, '<strong>$1</strong>');
         div.onclick = () => {
           searchInput.value = item.name;
           selectedItem = item;
           suggestionsDiv.innerHTML = '';
+          addBtn.disabled = false;
         };
         suggestionsDiv.appendChild(div);
       });
     });
 
     function addToInvoice() {
-      const name = searchInput.value;
-      const item = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+      if (!selectedItem) {
+        alert("Please select a valid item from suggestions.");
+        return;
+      }
 
-      if (!item) {
-        alert("Item not found or not selected from suggestions.");
+      const quantity = parseInt(document.getElementById('quantity').value);
+      if (isNaN(quantity) || quantity < 1) {
+        alert("Please enter a valid quantity.");
         return;
       }
 
@@ -119,30 +163,70 @@
       const row = document.createElement("tr");
 
       const nameCell = document.createElement("td");
-      nameCell.textContent = item.name;
+      nameCell.textContent = selectedItem.name;
+
+      const qtyCell = document.createElement("td");
+      qtyCell.textContent = quantity;
 
       const priceCell = document.createElement("td");
-      priceCell.textContent = `$${item.price.toFixed(2)}`;
+      priceCell.textContent = `$${selectedItem.price.toFixed(2)}`;
+
+      const totalPrice = selectedItem.price * quantity;
+      const totalCell = document.createElement("td");
+      totalCell.textContent = `$${totalPrice.toFixed(2)}`;
+
+      const removeCell = document.createElement("td");
+      const removeBtn = document.createElement("span");
+      removeBtn.textContent = "✕";
+      removeBtn.classList.add("remove-btn");
+      removeBtn.onclick = () => {
+        row.remove();
+        updateTotal(-totalPrice);
+        showToast("Item removed.");
+      };
+      removeCell.appendChild(removeBtn);
 
       row.appendChild(nameCell);
+      row.appendChild(qtyCell);
       row.appendChild(priceCell);
+      row.appendChild(totalCell);
+      row.appendChild(removeCell);
       tbody.appendChild(row);
 
-      updateTotal(item.price);
+      updateTotal(totalPrice);
+      showToast("Item added.");
 
+      // Reset
       searchInput.value = '';
+      document.getElementById('quantity').value = 1;
       selectedItem = null;
+      addBtn.disabled = true;
     }
 
-    function updateTotal(price) {
+    function updateTotal(change) {
       const totalSpan = document.getElementById('total');
       const current = parseFloat(totalSpan.textContent);
-      totalSpan.textContent = (current + price).toFixed(2);
+      totalSpan.textContent = (current + change).toFixed(2);
+    }
+
+    function clearInvoice() {
+      document.querySelector("#invoice-table tbody").innerHTML = '';
+      document.getElementById('total').textContent = '0.00';
+      showToast("Invoice cleared.");
     }
 
     function generatePDF() {
       const invoice = document.getElementById("invoice");
       html2pdf().from(invoice).save("invoice.pdf");
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2000);
     }
   </script>
 
